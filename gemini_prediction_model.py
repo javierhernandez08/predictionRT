@@ -14,9 +14,28 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 import google.generativeai as genai
 
-# Key Api and model configuration
+# ============================================================
+# 🔑 CONFIGURACIÓN DE API KEY - CORREGIDA
+# ============================================================
 load_dotenv()
+
+# Obtener y LIMPIAR la API key
 API_KEY = os.getenv("API_KEY")
+if API_KEY:
+    API_KEY = API_KEY.strip()  # Eliminar espacios en blanco
+else:
+    # Intentar cargar desde variable de entorno del sistema
+    API_KEY = os.environ.get("GEMINI_API_KEY")
+    if API_KEY:
+        API_KEY = API_KEY.strip()
+
+# Verificar que existe
+if not API_KEY:
+    print("⚠️ ERROR: No se encontró API_KEY en .env")
+    print("   Asegúrate de que el archivo .env existe y contiene:")
+    print("   API_KEY=AQ.Ab8RN6KUV8zn5FHSYH2ctIBxz09UE_GSTKkeEXNeotP1XZRb2A")
+else:
+    print(f"✅ API_KEY cargada correctamente: {API_KEY[:10]}...")
 
 MODEL_NAME = "gemini-2.5-flash"
 SEED = 42
@@ -60,20 +79,77 @@ def buscar_columna(df: pd.DataFrame, posibles: List[str]) -> Optional[str]:
     return None
 
 
+# Get all important columns from the dataset
+def obtener_columnas_importantes(df: pd.DataFrame) -> List[str]:
+    """
+    Identify all relevant chromatographic columns in the dataset.
+    Returns a list of column names that contain useful information.
+    """
+    important_patterns = [
+        # Column information
+        "column.name", "column.usp.code", "column.length", "column.id", 
+        "column.particle.size", "column.temperature", "column.flowrate",
+        
+        # Eluent A
+        "eluent.A.h2o", "eluent.A.formic", "eluent.A.pH", 
+        "eluent.A.acetic", "eluent.A.trifluoroacetic", "eluent.A.phosphor",
+        "eluent.A.nh4ac", "eluent.A.nh4form", "eluent.A.nh4carb",
+        "eluent.A.nh4bicarb", "eluent.A.nh4f", "eluent.A.nh4oh",
+        "eluent.A.trieth", "eluent.A.triprop", "eluent.A.tribut",
+        "eluent.A.nndimethylhex", "eluent.A.medronic",
+        
+        # Eluent B
+        "eluent.B.meoh", "eluent.B.formic", "eluent.B.pH",
+        "eluent.B.acetic", "eluent.B.trifluoroacetic", "eluent.B.phosphor",
+        "eluent.B.nh4ac", "eluent.B.nh4form", "eluent.B.nh4carb",
+        "eluent.B.nh4bicarb", "eluent.B.nh4f", "eluent.B.nh4oh",
+        "eluent.B.trieth", "eluent.B.triprop", "eluent.B.tribut",
+        "eluent.B.nndimethylhex", "eluent.B.medronic",
+        
+        # Eluent C (if present)
+        "eluent.C.formic", "eluent.C.acetic", "eluent.C.trifluoroacetic",
+        "eluent.C.phosphor", "eluent.C.nh4ac", "eluent.C.nh4form",
+        "eluent.C.nh4carb", "eluent.C.nh4bicarb", "eluent.C.nh4f",
+        "eluent.C.nh4oh", "eluent.C.trieth", "eluent.C.triprop",
+        "eluent.C.tribut", "eluent.C.nndimethylhex", "eluent.C.medronic",
+        
+        # Eluent D (if present)
+        "eluent.D.formic", "eluent.D.acetic", "eluent.D.trifluoroacetic",
+        "eluent.D.phosphor", "eluent.D.nh4ac", "eluent.D.nh4form",
+        "eluent.D.nh4carb", "eluent.D.nh4bicarb", "eluent.D.nh4f",
+        "eluent.D.nh4oh", "eluent.D.trieth", "eluent.D.triprop",
+        "eluent.D.tribut", "eluent.D.nndimethylhex", "eluent.D.medronic",
+        
+        # Gradient
+        "gradient.start.A", "gradient.end.B"
+    ]
+    
+    present = []
+    for pattern in important_patterns:
+        col = buscar_columna(df, [pattern])
+        if col is not None:
+            present.append(col)
+    
+    return present
+
 # Prepare the dataframe that is later used for context and selection
-def preparar_df(df: pd.DataFrame) -> Tuple[pd.DataFrame, str, str]:
+def preparar_df(df: pd.DataFrame) -> Tuple[pd.DataFrame, str, str, List[str]]:
     col_rt = buscar_columna(df, ["rt", "rt_min", "retention_time"])
     col_smiles = buscar_columna(df, ["pubchem.smiles.canonical", "smiles"])
     if col_rt is None or col_smiles is None:
         raise RuntimeError("No se encontraron columnas RT o SMILES.")
+    
     df = df.copy()
     df[col_rt] = pd.to_numeric(df[col_rt], errors="coerce")
     df[col_smiles] = df[col_smiles].astype(str)
     df = df.dropna(subset=[col_rt, col_smiles])
     df = df[df[col_smiles].str.strip().ne("")]
     df = df.reset_index(drop=True)
-    return df, col_rt, col_smiles
-
+    
+    # Get all important columns
+    important_cols = obtener_columnas_importantes(df)
+    
+    return df, col_rt, col_smiles, important_cols
 
 # Divides the Excel into 80(context) and 20(prediction)
 def split_80_20(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -83,30 +159,56 @@ def split_80_20(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
 
 # Build the context table that will be sent to Gemini based on the uploaded Excel file
-def construir_tabla_contexto(ctx: pd.DataFrame, col_rt: str, col_smiles: str) -> str:
-    extra_cols = [
-        "column.name", "column.usp.code", "column.length", "column.particle.size",
-        "column.temperature", "column.flowrate",
-        "eluent.A.h2o", "eluent.A.pH",
-        "eluent.B.meoh", "eluent.B.pH",
-        "gradient.start.A", "gradient.end.B"
-    ]
-    present = [c for c in extra_cols if c in ctx.columns]
+def construir_tabla_contexto(ctx: pd.DataFrame, col_rt: str, col_smiles: str, important_cols: List[str] = None) -> str:
+    # If no important columns provided, use default list
+    if important_cols is None:
+        important_cols = [
+            "column.name", "column.usp.code", "column.length", "column.particle.size",
+            "column.temperature", "column.flowrate",
+            "eluent.A.h2o", "eluent.A.pH",
+            "eluent.B.meoh", "eluent.B.pH",
+            "gradient.start.A", "gradient.end.B"
+        ]
+    
+    # Filter to only columns that actually exist in the dataframe
+    present = [c for c in important_cols if c in ctx.columns]
 
     lines = []
     for _, r in ctx.head(MAX_CONTEXT_ROWS).iterrows():
         smi = str(r[col_smiles]).strip()[:MAX_CONTEXT_SMILES_LEN]
         rt = float(r[col_rt])
-        extras = " | ".join(f"{c}={r[c]}" for c in present if pd.notna(r[c]))
+        
+        # Build extras string with all available important columns
+        extras_parts = []
+        for c in present:
+            val = r[c]
+            if pd.notna(val):
+                # Format the value nicely
+                if isinstance(val, float):
+                    extras_parts.append(f"{c}={val:.3f}" if val % 1 != 0 else f"{c}={int(val)}")
+                else:
+                    extras_parts.append(f"{c}={val}")
+        
+        extras = " | ".join(extras_parts)
         lines.append(f"{rt:.3f}\t{smi}\t{extras}")
+    
     return "\n".join(lines)
-
-
 # Gemini Methods.
 
 def configurar_gemini() -> genai.GenerativeModel:
+    global API_KEY  # Asegura que usa la variable global
+    
+    if not API_KEY:
+        # Intentar recargar desde .env
+        load_dotenv()
+        API_KEY = os.getenv("API_KEY")
+        if API_KEY:
+            API_KEY = API_KEY.strip()
+    
     if not API_KEY:
         raise RuntimeError("Falta API_KEY en .env")
+    
+    print(f"🔑 Configurando Gemini con: {API_KEY[:10]}...")  # Debug
     genai.configure(api_key=API_KEY)
     return genai.GenerativeModel(MODEL_NAME)
 
@@ -266,19 +368,23 @@ def load():
         return jsonify({"error": "No hay Excel cargado"}), 400
 
     raw = pd.read_excel(BytesIO(state["xls_bytes"]), sheet_name=sheet)
-    df, col_rt, col_smiles = preparar_df(raw)
+    df, col_rt, col_smiles, important_cols = preparar_df(raw)  # ✅ Now returns important_cols
 
     
     ctx80, rest20 = split_80_20(df)
-    train_table = construir_tabla_contexto(ctx80, col_rt, col_smiles)
+    train_table = construir_tabla_contexto(ctx80, col_rt, col_smiles, important_cols)  # ✅ Now includes all columns
 
     model = configurar_gemini()
     chat = model.start_chat(history=[])
 
     if state["paper_path"]:
-        paper_handle = genai.upload_file(path=state["paper_path"], mime_type="application/pdf")
-        init_msg = [paper_handle, prompt_1(train_table)]
-        log("Enviando PROMPT 1 + paper...")
+        try:
+            paper_handle = genai.upload_file(path=state["paper_path"], mime_type="application/pdf")
+            init_msg = [paper_handle, prompt_1(train_table)]
+            log("Enviando PROMPT 1 + paper...")
+        except Exception as e:
+            log(f"Error al subir paper: {e}. Continuando sin paper.")
+            init_msg = prompt_1(train_table)
     else:
         init_msg = prompt_1(train_table)
         log("Enviando PROMPT 1 (sin paper)...")
@@ -305,32 +411,65 @@ def load():
         "col_smiles": col_smiles,
         "rows": rows.to_dict("records"),
     })
-
-
+    
 # Function that handles scenarios without Excel, either with a paper or with nothing.
 @app.route("/api/init_no_excel", methods=["POST"])
 def init_no_excel():
-    model = configurar_gemini()
-    chat = model.start_chat(history=[])
+    try:
+        # Obtener el SMILES del frontend
+        data = request.get_json()
+        smiles = data.get("smiles", "").strip() if data else ""
+        
+        if not smiles:
+            return jsonify({"error": "SMILES es requerido"}), 400
+        
+        log(f"Inicializando Gemini sin Excel para SMILES: {smiles[:50]}...")
+        
+        model = configurar_gemini()
+        chat = model.start_chat(history=[])
 
-    if state["paper_path"]:
-        paper_handle = genai.upload_file(path=state["paper_path"], mime_type="application/pdf")
-        init_msg = [paper_handle, prompt_1_no_excel()]
-        log("Enviando PROMPT 1 (solo paper, sin Excel)...")
-    else:
-        init_msg = prompt_1_no_excel()
-        log("Enviando PROMPT 1 (sin paper ni Excel)...")
+        # 🔧 MANEJO DEL PAPER CORREGIDO
+        if state["paper_path"]:
+            try:
+                # Verificar que el archivo existe
+                if not os.path.exists(state["paper_path"]):
+                    log(f"⚠️ El archivo paper no existe en: {state['paper_path']}")
+                    raise FileNotFoundError(f"No se encuentra el archivo: {state['paper_path']}")
+                
+                # Verificar que el archivo no está vacío
+                if os.path.getsize(state["paper_path"]) == 0:
+                    log("⚠️ El archivo paper está vacío")
+                    raise ValueError("El archivo PDF está vacío")
+                
+                log(f"📄 Subiendo paper: {state['paper_path']} ({os.path.getsize(state['paper_path'])} bytes)")
+                paper_handle = genai.upload_file(path=state["paper_path"], mime_type="application/pdf")
+                init_msg = [paper_handle, prompt_1_no_excel()]
+                log("Enviando PROMPT 1 + paper...")
+            except Exception as e:
+                log(f"❌ Error al subir paper: {str(e)}. Continuando sin paper.")
+                init_msg = prompt_1_no_excel()
+                log("Enviando PROMPT 1 (sin paper por error)...")
+        else:
+            init_msg = prompt_1_no_excel()
+            log("Enviando PROMPT 1 (sin paper ni Excel)...")
 
-    resp = enviar(chat, init_msg, log_fn=log)
+        resp = enviar(chat, init_msg, log_fn=log)
+        log(f"PROMPT 1 OK. Resp: {resp[:60]}")
 
-    state.update({
-        "chat": chat,
-        "df80": None,
-        "col_rt": None,
-        "col_smiles": None,
-    })
+        state.update({
+            "chat": chat,
+            "df80": None,
+            "col_rt": None,
+            "col_smiles": None,
+        })
 
-    return jsonify({"ok": True})
+        return jsonify({"ok": True})
+        
+    except Exception as e:
+        log(f"ERROR en init_no_excel: {str(e)}")
+        import traceback
+        log(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
 
 
 # Send the manually entered SMILES, read the response, and truncate it to keep only the number.
@@ -1074,7 +1213,19 @@ async function initNoExcel() {
   document.getElementById("btn-step2-action").disabled = true;
 
   try {
-    const r = await fetch("/api/init_no_excel", { method: "POST" });
+    const r = await fetch("/api/init_no_excel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ smiles: smiles })
+    });
+    
+    // Verificar que la respuesta es JSON
+    const contentType = r.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      const text = await r.text();
+      throw new Error(`El servidor devolvió HTML en lugar de JSON: ${text.substring(0, 100)}...`);
+    }
+    
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Error initialising");
 
@@ -1090,6 +1241,7 @@ async function initNoExcel() {
 
   } catch(e) {
     showToast(e.message, true);
+    console.error("Error en initNoExcel:", e);
   } finally {
     setLoader(2, false);
     document.getElementById("btn-step2-action").disabled = false;
