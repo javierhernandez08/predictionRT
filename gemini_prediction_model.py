@@ -211,7 +211,7 @@ def configurar_gemini() -> genai.GenerativeModel:
     return genai.GenerativeModel(MODEL_NAME)
 
 
-# Read Gemini’s response, clean it, and merge it for final visualization
+# Read Gemini´s response, clean it, and merge it for final visualization
 def leer_texto_seguro(resp: Any) -> str:
     try:
         if hasattr(resp, "candidates") and resp.candidates:
