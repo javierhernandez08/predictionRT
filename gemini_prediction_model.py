@@ -358,7 +358,7 @@ def upload_paper():
     return jsonify({"ok": True, "name": f.filename})
 
 
-# “Function that sends the data to Gemini (reads the Excel file, uploads the paper, creates the context table) and saves the response.
+#Function that sends the data to Gemini (reads the Excel file, uploads the paper, creates the context table) and saves the response.
 @app.route("/api/load", methods=["POST"])
 def load():
     sheet = request.json["sheet"]
