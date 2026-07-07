@@ -428,7 +428,7 @@ def init_no_excel():
         model = configurar_gemini()
         chat = model.start_chat(history=[])
 
-        # 🔧 MANEJO DEL PAPER CORREGIDO
+        
         if state["paper_path"]:
             try:
                 # Verificar que el archivo existe
