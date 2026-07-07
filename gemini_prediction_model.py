@@ -14,9 +14,9 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 import google.generativeai as genai
 
-# ============================================================
-# 🔑 CONFIGURACIÓN DE API KEY - CORREGIDA
-# ============================================================
+
+#CONFIGURACIÓN DE API KEY 
+
 load_dotenv()
 
 # Obtener y LIMPIAR la API key
