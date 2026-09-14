@@ -83,9 +83,9 @@ Scenario G works differently from the others: instead of holding out 20% of a sh
 
 For scenarios A-F, once a scenario has accumulated predictions across one or more sheets, you can download:
 
-* **CSV** — raw predictions (SMILES, real RT, predicted RT, absolute error)
-* **PDF** — a formatted report with all statistical metrics
-* **PNG** — the predicted-vs-real scatter chart
+* **CSV** - raw predictions (SMILES, real RT, predicted RT, absolute error)
+* **PDF** - a formatted report with all statistical metrics
+* **PNG** - the predicted-vs-real scatter chart
 
 ## Excel Requirements
 
