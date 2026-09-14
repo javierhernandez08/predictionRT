@@ -23,6 +23,22 @@ pip install flask flask-cors python-dotenv google-genai pandas openpyxl numpy sc
 
 If RDKit fails to install on your system, the app will still run: it falls back to a pure-Python hashing fingerprint instead of RDKit's Morgan fingerprint. Prediction quality will be slightly lower in that case.
 
+| Package | Used for |
+|---|---|
+| `flask` | The web server (API routes, serving the interface) |
+| `flask-cors` | Allowing CORS requests from the browser |
+| `python-dotenv` | Loading the API keys from the `.env` file |
+| `google-genai` | The Gemini API client |
+| `pandas` | Reading the Excel file and handling the data tables |
+| `openpyxl` | Engine pandas uses to read `.xlsx` files |
+| `numpy` | Numerical computation (fingerprints, statistics, feature matrices) |
+| `scikit-learn` | Linear Regression and Random Forest (scenarios E, F and G) |
+| `rdkit` | Real molecular fingerprints from SMILES (scenarios E, F and G), and InChI-to-SMILES conversion in scenario H |
+| `fpdf2` | Generating the downloadable statistics PDF |
+| `pubchempy` (optional) | Only needed for scenario H when a dataset gives compound NAMES instead of SMILES/InChI. Resolves names to structures via PubChem, so it needs internet access. Install with `pip install pubchempy` if you plan to use scenario H on name-only datasets. |
+
+Everything else the script imports (`os`, `re`, `csv`, `time`, `hashlib`, `threading`, `webbrowser`, `io`, `typing`) is part of Python's standard library and does not need to be installed separately.
+
 ## Gemini API Configuration
 
 Create a file named `.env` in the project root directory:
@@ -55,10 +71,10 @@ A browser window should open automatically.
 
 ## Usage
 
-1. Choose one of the seven scenarios (A through G, see below).
-2. Upload an Excel dataset (`.xlsx`/`.xls`). A scientific paper (`.pdf`) can also be uploaded for scenarios C and D (required for D, optional for C).
-3. Select the Excel sheet to work with.
-4. Depending on the scenario, either run the prediction on that sheet's held-out 20%, or train a model on the whole sheet and predict a SMILES you type in by hand (scenario G).
+1. Choose one of the eight scenarios (A through H, see below).
+2. For scenarios A-G: upload an Excel dataset (`.xlsx`/`.xls`). A scientific paper (`.pdf`) can also be uploaded for scenarios C and D (required for D, optional for C). For scenario H: upload an external CSV or Excel dataset instead (see below).
+3. For scenarios A-G, select the Excel sheet to work with.
+4. Depending on the scenario, either run the prediction on that sheet's held-out 20%, train a model on the whole sheet and predict a SMILES you type in by hand (scenario G), or run the 80/20 evaluation directly on the external dataset (scenario H).
 5. Review the results, then check the accumulated statistics for that scenario (MAE, RMSE, R², correlations, regression fit) and download them as CSV, PDF or a chart image if needed.
 
 ## Scenarios
@@ -72,20 +88,42 @@ A browser window should open automatically.
 | E | Linear Regression trained on the sheet's 80%, predicts the 20% | Local ML |
 | F | Random Forest trained on the sheet's 80%, predicts the 20% | Local ML |
 | G | Train on the whole sheet, then predict any SMILES typed in by hand | Local ML |
+| H | Auto-detects the compound/RT columns of an external dataset (SMILES, InChI or compound name), then 80/20 evaluation | Local ML or Gemini |
 
-Scenarios A-D call the Gemini API and need at least one key configured in `.env`. Scenarios E, F and G run entirely locally with scikit-learn and do not use the API or consume any quota.
+Scenarios A-D call the Gemini API and need at least one key configured in `.env`. Scenarios E, F and G run entirely locally with scikit-learn and do not use the API or consume any quota. Scenario H can use either: Random Forest and Linear Regression run locally, while its optional LLM mode calls Gemini.
 
 ## Manual SMILES (Scenario G)
 
 Scenario G works differently from the others: instead of holding out 20% of a sheet, it trains a model (Random Forest or Linear Regression, selectable in the interface) on every valid row of the chosen sheet, then lets you type in any SMILES string and get an instant predicted RT. If the sheet has chromatographic condition columns (column type, pH, flow rate, gradient, etc.), you can optionally fill those in too; anything left blank defaults to 0. Predictions made this way are kept in a session list that can be downloaded as CSV.
 
+## External Datasets (Scenario H)
+
+Scenario H is meant for datasets from other published studies, where the columns will not already match this app's naming convention. Instead of the usual Excel + paper upload, it accepts a single **CSV or Excel** file and automatically detects:
+
+* **The RT column** — tries `rt`, `rt_min`, `retention_time`, `retention_time_corrected` and a few other common variants.
+* **The compound column**, in this order of preference:
+  1. **SMILES** directly, if a column matching that is found.
+  2. **InChI** — converted to SMILES locally with RDKit (no internet needed).
+  3. **Compound name** (e.g. "ibuprofen") — resolved to SMILES via PubChem using `pubchempy`, which **requires internet access** and the optional `pubchempy` package (see Requirements above). If neither `pubchempy` nor a SMILES/InChI column is available, the app will tell you exactly what is missing instead of failing silently.
+
+CSV files are read with automatic delimiter detection (so a `;`-separated file, common in some European datasets, works without extra configuration). If the uploaded Excel file has more than one sheet, a sheet selector appears.
+
+Once the dataset is loaded, the panel shows what was detected (RT column, compound column type, how many compounds are valid, how many rows were dropped because the RT wasn't numeric or the structure couldn't be parsed) before you run anything.
+
+You then choose the algorithm:
+
+* **Random Forest** or **Linear Regression** — run entirely locally, on the full 20% test split, however large it is.
+* **LLM (Gemini)** — reuses the same 80% context / 20% prediction approach as scenario B. Because sending an enormous dataset (tens of thousands of compounds) to Gemini in one run is impractical, the prediction set is automatically capped to a random sample of 500 compounds when it is larger than that; the results will indicate if this happened.
+
+Results from scenario H feed into the same statistics, CSV/PDF/PNG downloads and chart as any other scenario.
+
 ## Downloading Results
 
-For scenarios A-F, once a scenario has accumulated predictions across one or more sheets, you can download:
+For scenarios A-F and H, once a scenario has accumulated predictions across one or more sheets, you can download:
 
-* **CSV** - raw predictions (SMILES, real RT, predicted RT, absolute error)
-* **PDF** - a formatted report with all statistical metrics
-* **PNG** - the predicted-vs-real scatter chart
+* **CSV** — raw predictions (SMILES, real RT, predicted RT, absolute error)
+* **PDF** — a formatted report with all statistical metrics
+* **PNG** — the predicted-vs-real scatter chart
 
 ## Excel Requirements
 
