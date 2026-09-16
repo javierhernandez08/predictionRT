@@ -56,7 +56,7 @@ https://aistudio.google.com/app/apikey
 
 ## Run the Application
 
-python rt_predictor_scenarios.py
+python gemini_prediction_model.py
 
 The application will start on:
 
