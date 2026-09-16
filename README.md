@@ -77,7 +77,7 @@ For RDKIT correct import windows security smart apps must be deactivated, otherw
 
 1. Choose one of the eight scenarios (A through H, see below).
 2. For scenarios A-G: upload an Excel dataset (`.xlsx`/`.xls`). A scientific paper (`.pdf`) can also be uploaded for scenarios C and D (required for D, optional for C). For scenario H: upload an external CSV or Excel dataset instead (see below).
-3. For scenarios A-G, select the Excel sheet to work with.
+3. For scenarios A-H, select the Excel sheet to work with.
 4. Depending on the scenario, either run the prediction on that sheet's held-out 20%, train a model on the whole sheet and predict a SMILES you type in by hand (scenario G), or run the 80/20 evaluation directly on the external dataset (scenario H).
 5. Review the results, then check the accumulated statistics for that scenario (MAE, RMSE, R², correlations, regression fit) and download them as CSV, PDF or a chart image if needed.
 
