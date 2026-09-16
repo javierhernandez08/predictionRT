@@ -1,72 +1,3 @@
-# Retention Time Predictor
-
-## Requirements
-
-* Python 3.10+
-* A Google Gemini API Key (or several, for automatic rotation)
-* RDKit (optional, but recommended for accurate molecular fingerprints)
-
-## Installation
-
-### 1. Clone the project
-
-```
-git clone <repository_url>
-cd <project_folder>
-```
-
-### 2. Install dependencies
-
-```
-pip install flask flask-cors python-dotenv google-genai pandas openpyxl numpy scikit-learn rdkit fpdf2 matplotlib
-```
-
-If RDKit fails to install on your system, the app will still run: it falls back to a pure-Python hashing fingerprint instead of RDKit's Morgan fingerprint. Prediction quality will be slightly lower in that case.
-
-| Package | Used for |
-|---|---|
-| `flask` | The web server (API routes, serving the interface) |
-| `flask-cors` | Allowing CORS requests from the browser |
-| `python-dotenv` | Loading the API keys from the `.env` file |
-| `google-genai` | The Gemini API client |
-| `pandas` | Reading the Excel file and handling the data tables |
-| `openpyxl` | Engine pandas uses to read `.xlsx` files |
-| `numpy` | Numerical computation (fingerprints, statistics, feature matrices) |
-| `scikit-learn` | Linear Regression and Random Forest (scenarios E, F and G) |
-| `rdkit` | Real molecular fingerprints from SMILES (scenarios E, F and G), and InChI-to-SMILES conversion in scenario H |
-| `fpdf2` | Generating the downloadable statistics PDF |
-| `matplotlib` | Drawing the decision tree, feature importance and coefficient charts (scenarios E and F) |
-| `pubchempy` (optional) | Only needed for scenario H when a dataset gives compound NAMES instead of SMILES/InChI. Resolves names to structures via PubChem, so it needs internet access. Install with `pip install pubchempy` if you plan to use scenario H on name-only datasets. |
-
-Everything else the script imports (`os`, `re`, `csv`, `time`, `hashlib`, `threading`, `webbrowser`, `io`, `typing`) is part of Python's standard library and does not need to be installed separately.
-
-## Gemini API Configuration
-
-Create a file named `.env` in the project root directory:
-
-```
-GEMINI_API_KEY_1=YOUR_GEMINI_API_KEY
-GEMINI_API_KEY_2=YOUR_SECOND_GEMINI_API_KEY
-GEMINI_API_KEY_3=YOUR_THIRD_GEMINI_API_KEY
-```
-
-You can add up to 10 keys (`GEMINI_API_KEY_1` through `GEMINI_API_KEY_10`). The app rotates between them automatically and puts a key on a short cooldown if it hits a rate limit or quota error, so you do not have to babysit it during long runs. A single key also works, using either `GEMINI_API_KEY_1` or just `GEMINI_API_KEY` / `API_KEY`.
-
-You can obtain a Gemini API key from:
-
-https://aistudio.google.com/app/apikey
-
-## Run the Application
-
-```
-python gemini_prediction_model.py
-```
-
-The application will start on:
-
-```
-http://127.0.0.1:5000
-```
 
 A browser window should open automatically.
 
@@ -74,7 +5,7 @@ A browser window should open automatically.
 
 1. Choose one of the eight scenarios (A through H, see below).
 2. For scenarios A-G: upload an Excel dataset (`.xlsx`/`.xls`). A scientific paper (`.pdf`) can also be uploaded for scenarios C and D (required for D, optional for C). For scenario H: upload an external CSV or Excel dataset instead (see below).
-3. For scenarios A-G, select the Excel sheet to work with.
+3. For scenarios A-G, select the Excel sheet to work with. While the sheet is being loaded, a spinner is shown and the sheet info (valid rows, 80/20 split, whether it was already processed) appears only once it has finished; the run button stays disabled until then.
 4. Depending on the scenario, either run the prediction on that sheet's held-out 20%, train a model on the whole sheet and predict a SMILES you type in by hand (scenario G), or run the 80/20 evaluation directly on the external dataset (scenario H).
 5. Review the results, then check the accumulated statistics for that scenario (MAE, RMSE, R², correlations, regression fit) and download them as CSV, PDF or a chart image if needed.
 
@@ -118,17 +49,15 @@ You then choose the algorithm:
 
 Results from scenario H feed into the same statistics, CSV/PDF/PNG downloads and chart as any other scenario.
 
-## Model Insights (Scenarios E and F)
+## Model Insights (Scenario F only)
 
-After running scenario E (Linear Regression) or F (Random Forest) on a sheet, the statistics panel shows extra download buttons so you can inspect the model itself, not just its accuracy:
+After running scenario F (Random Forest) on a sheet, the statistics panel shows an extra download button so you can inspect the model itself, not just its accuracy:
 
-* **🌳 Download a tree (PNG)** *(scenario F only)* — draws one of the 300 trees in the Random Forest. Only the first 3 levels are shown, since the full tree is far too deep and large to read; the caption makes this clear.
-* **📊 Download feature importances (PNG)** *(scenario F only)* — a bar chart of the 20 features the forest relies on most.
-* **📈 Download coefficients (PNG)** *(scenario E only)* — a bar chart of the Linear Regression coefficients, plus the intercept.
+* **🌳 Download a tree (PNG)** — draws one of the 300 trees in the Random Forest. Only the first 3 levels are shown, since the full tree is far too deep and large to read; the caption makes this clear.
 
-These charts label the 1024 Morgan fingerprint bits as `fp_0`, `fp_1`, etc., since a single bit does not correspond to a readable chemical name on its own. Any named chromatographic condition columns present in the sheet (pH, temperature, flow rate, and so on) keep their real names. For that reason, the coefficients chart for scenario E only plots the named columns and skips the 1024 fingerprint-bit coefficients, since those are not individually interpretable.
+This chart labels the 1024 Morgan fingerprint bits as `fp_0`, `fp_1`, etc., since a single bit does not correspond to a readable chemical name on its own. Any named chromatographic condition columns present in the sheet (pH, temperature, flow rate, and so on) keep their real names.
 
-These buttons only appear once a model has actually been trained for that scenario in the current session (that is, after running at least one sheet with E or F). If you switch to a different scenario and come back, the buttons reflect whichever sheet you ran most recently.
+The button only appears when the currently selected scenario is **F** and a Random Forest model has been trained on at least one sheet during the current session. It is not offered for scenarios E, G or H, even if those scenarios also trained a model internally.
 
 ## Downloading Results
 
@@ -138,7 +67,7 @@ For scenarios A-F and H, once a scenario has accumulated predictions across one 
 * **PDF** — a formatted report with all statistical metrics
 * **PNG** — the predicted-vs-real scatter chart
 
-Scenarios E and F additionally offer the model-specific PNG downloads described in [Model Insights](#model-insights-scenarios-e-and-f) below.
+Scenario F additionally offers the decision-tree PNG download described in [Model Insights](#model-insights-scenario-f-only) above.
 
 ## Excel Requirements
 
