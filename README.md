@@ -22,6 +22,9 @@ pip install flask flask-cors python-dotenv google-genai pandas openpyxl numpy sc
 ```
 
 If RDKit fails to install on your system, the app will still run: it falls back to a pure-Python hashing fingerprint instead of RDKit's Morgan fingerprint. Prediction quality will be slightly lower in that case.
+## IMPORTANT
+For RDKIT correct import windows security smart apps must be deactivated, otherwise the import would no be done and the tree will not be correct 
+
 
 | Package | Used for |
 |---|---|
@@ -70,8 +73,6 @@ http://127.0.0.1:5000
 
 A browser window should open automatically.
 
-## IMPORTANT
-For RDKIT correct import windows security smart apps must be deactivated, otherwise the import would no be done and the tree will not be correct 
 
 ## Usage
 
